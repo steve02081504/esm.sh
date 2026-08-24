@@ -1,5 +1,15 @@
 # Server Changelog
 
+## v138
+
+* Replace `rex` with the Go standard HTTP package. (#1387)
+* Harden loaders and package extraction against trust bypasses. (#1389)
+* Upgrade `cjs-module-lexer` to 1.1.0.
+* Fix package `main` overriding `exports`. (#1392)
+* Fix nested package import conditions. (#1394)
+* Fix TypeScript declaration transformation correctness and performance. (#1395)
+* Fix source map export analysis. (#1396)
+
 ## v137_8
 
 * Fix redirect urls for `raw.esm.sh` hostname. (#1385)
