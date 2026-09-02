@@ -20,48 +20,24 @@ import (
 )
 
 func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
-	// An explicit-version request that is NOT newer than the cached `latest`
-	// resolution must leave the caches untouched.
-	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
-	setCacheItem("404:cache-test@latest", "boom", time.Minute)
-	invalidateDistTagCacheIfNewer("cache-test", "1.2.0")
-	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
-		t.Fatal("expected latest cache to be preserved when the requested version equals the cached one")
+	tests := []struct {
+		request string
+		invalid bool
+	}{
+		{"1.2.0", false},  // equal to the cached `latest`
+		{"1.1.0", false},  // older
+		{"2.0.0", true},   // newer
+		{"latest", false}, // non-exact
+		{"v2.0.0", true},  // v-prefixed newer
 	}
-	if _, ok := getCacheItem("404:cache-test@latest"); !ok {
-		t.Fatal("expected 404 cache to be preserved when the requested version equals the cached one")
-	}
-
-	// An older explicit-version request must not invalidate either.
-	invalidateDistTagCacheIfNewer("cache-test", "1.1.0")
-	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
-		t.Fatal("expected latest cache to be preserved when the requested version is older")
-	}
-	if _, ok := getCacheItem("404:cache-test@latest"); !ok {
-		t.Fatal("expected 404 cache to be preserved when the requested version is older")
-	}
-
-	// A newer explicit-version request invalidates both the `latest` and its 404 cache.
-	invalidateDistTagCacheIfNewer("cache-test", "2.0.0")
-	if _, ok := getCacheItem("npm:cache-test@latest"); ok {
-		t.Fatal("expected latest cache to be invalidated when a newer version is requested")
-	}
-	if _, ok := getCacheItem("404:cache-test@latest"); ok {
-		t.Fatal("expected 404 cache to be invalidated when a newer version is requested")
-	}
-
-	// Non-exact versions are never acted upon.
-	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
-	invalidateDistTagCacheIfNewer("cache-test", "latest")
-	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
-		t.Fatal("expected latest cache to be preserved for a non-exact version")
-	}
-
-	// A `v`-prefixed version is normalized and still acted upon.
-	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
-	invalidateDistTagCacheIfNewer("cache-test", "v2.0.0")
-	if _, ok := getCacheItem("npm:cache-test@latest"); ok {
-		t.Fatal("expected latest cache to be invalidated for a v-prefixed newer version")
+	for _, test := range tests {
+		setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
+		setCacheItem("404:cache-test@latest", "boom", time.Minute)
+		invalidateDistTagCacheIfNewer("cache-test", test.request)
+		_, ok := getCacheItem("npm:cache-test@latest")
+		if invalid := !ok; invalid != test.invalid {
+			t.Fatalf("request %q: expected invalidated=%v, got %v", test.request, test.invalid, invalid)
+		}
 	}
 }
 

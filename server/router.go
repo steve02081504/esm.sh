@@ -1378,9 +1378,7 @@ func esmRouter(esmStorage storage.Storage, logger *log.Logger) http.Handler {
 					return
 				}
 				buildMeta = output.meta
-				// A new version has just been built successfully: let the default
-				// (bare-name) URL follow it immediately instead of waiting for the
-				// npm query cache TTL to expire.
+				// Follow a freshly built version in the default URL immediately.
 				invalidateDistTagCacheIfNewer(esmPath.PkgName, esmPath.PkgVersion)
 			case <-time.After(time.Duration(config.BuildWaitTime) * time.Second):
 				header.Set("Cache-Control", ccMustRevalidate)

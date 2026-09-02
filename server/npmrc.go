@@ -284,30 +284,24 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	})
 }
 
-// invalidateDistTagCacheIfNewer invalidates the cached "latest" (and its 404
-// counterpart) resolution of a package when a newer explicit version has just
-// been built successfully. It should only be called after the build of the
-// requested version has succeeded, so the default (bare-name) URL can follow the
-// new version immediately without waiting for the npm query cache TTL to expire.
-// Calling it at package-resolution time would let repeated explicit-version
-// requests force continuous npm re-queries, and could point the default URL at a
-// version whose build actually fails. This pairs well with a larger
-// npmQueryCacheTTL: authors refresh on demand, so the server can query the
-// registry less often.
+// invalidateDistTagCacheIfNewer drops the cached "latest" (and its 404)
+// resolution of pkgName once a newer exact version has been built
+// successfully, so the default (bare-name) URL follows it without waiting for
+// the npm query cache TTL. Only call it after a build succeeds: replaying it
+// at resolution time would keep forcing npm re-queries and could pin the
+// default URL to a version whose build fails.
 func invalidateDistTagCacheIfNewer(pkgName string, version string) {
 	version = npm.NormalizePackageVersion(version)
 	if !npm.IsExactVersion(version) {
 		return
 	}
-	v, ok := getCacheItem("npm:" + pkgName + "@latest")
-	if !ok {
-		return
-	}
+	key := "npm:" + pkgName + "@latest"
+	v, ok := getCacheItem(key)
 	latest, ok := v.(*npm.PackageJSON)
-	if !ok || latest.Version == version || !semverLessThan(latest.Version, version) {
+	if !ok || !semverLessThan(latest.Version, version) {
 		return
 	}
-	deleteCacheItem("npm:" + pkgName + "@latest")
+	deleteCacheItem(key)
 	deleteCacheItem("404:" + pkgName + "@latest")
 }
 
