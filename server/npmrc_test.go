@@ -56,6 +56,13 @@ func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
 	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
 		t.Fatal("expected latest cache to be preserved for a non-exact version")
 	}
+
+	// A `v`-prefixed version is normalized and still acted upon.
+	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	invalidateDistTagCacheIfNewer("cache-test", "v2.0.0")
+	if _, ok := getCacheItem("npm:cache-test@latest"); ok {
+		t.Fatal("expected latest cache to be invalidated for a v-prefixed newer version")
+	}
 }
 
 func TestSameURLOrigin(t *testing.T) {

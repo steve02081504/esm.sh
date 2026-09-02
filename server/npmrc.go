@@ -249,7 +249,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	}
 
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
-	pkg, err := withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
+	return withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
 		if npm.IsExactVersion(version) {
 			var raw npm.PackageJSONRaw
 			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
@@ -282,20 +282,20 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 		return rawData.ToNpmPackage(), "npm:" + pkgName + "@" + rawData.Version, nil
 	})
-	if err == nil && npm.IsExactVersion(version) {
-		invalidateDistTagCacheIfNewer(pkgName, pkg.Version)
-	}
-	return pkg, err
 }
 
 // invalidateDistTagCacheIfNewer invalidates the cached "latest" (and its 404
-// counterpart) resolution of a package when an explicitly-requested version
-// resolves to a version newer than the currently cached one. This lets package
-// authors refresh the default (bare-name) version immediately by requesting the
-// new version explicitly, without waiting for the npm query cache TTL to expire.
-// In turn, that allows deployments to run with a larger npmQueryCacheTTL while
-// still picking up new releases promptly when the author asks for one.
+// counterpart) resolution of a package when a newer explicit version has just
+// been built successfully. It should only be called after the build of the
+// requested version has succeeded, so the default (bare-name) URL can follow the
+// new version immediately without waiting for the npm query cache TTL to expire.
+// Calling it at package-resolution time would let repeated explicit-version
+// requests force continuous npm re-queries, and could point the default URL at a
+// version whose build actually fails. This pairs well with a larger
+// npmQueryCacheTTL: authors refresh on demand, so the server can query the
+// registry less often.
 func invalidateDistTagCacheIfNewer(pkgName string, version string) {
+	version = npm.NormalizePackageVersion(version)
 	if !npm.IsExactVersion(version) {
 		return
 	}
