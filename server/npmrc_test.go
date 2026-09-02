@@ -14,7 +14,49 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/esm-dev/esm.sh/internal/npm"
 )
+
+func TestInvalidateDistTagCacheIfNewer(t *testing.T) {
+	// An explicit-version request that is NOT newer than the cached `latest`
+	// resolution must leave the caches untouched.
+	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.2.0"}, time.Minute)
+	setCacheItem("404:cache-test@latest", "boom", time.Minute)
+	invalidateDistTagCacheIfNewer("cache-test", "1.2.0")
+	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
+		t.Fatal("expected latest cache to be preserved when the requested version equals the cached one")
+	}
+	if _, ok := getCacheItem("404:cache-test@latest"); !ok {
+		t.Fatal("expected 404 cache to be preserved when the requested version equals the cached one")
+	}
+
+	// An older explicit-version request must not invalidate either.
+	invalidateDistTagCacheIfNewer("cache-test", "1.1.0")
+	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
+		t.Fatal("expected latest cache to be preserved when the requested version is older")
+	}
+	if _, ok := getCacheItem("404:cache-test@latest"); !ok {
+		t.Fatal("expected 404 cache to be preserved when the requested version is older")
+	}
+
+	// A newer explicit-version request invalidates both the `latest` and its 404 cache.
+	invalidateDistTagCacheIfNewer("cache-test", "2.0.0")
+	if _, ok := getCacheItem("npm:cache-test@latest"); ok {
+		t.Fatal("expected latest cache to be invalidated when a newer version is requested")
+	}
+	if _, ok := getCacheItem("404:cache-test@latest"); ok {
+		t.Fatal("expected 404 cache to be invalidated when a newer version is requested")
+	}
+
+	// Non-exact versions are never acted upon.
+	setCacheItem("npm:cache-test@latest", &npm.PackageJSON{Version: "1.0.0"}, time.Minute)
+	invalidateDistTagCacheIfNewer("cache-test", "latest")
+	if _, ok := getCacheItem("npm:cache-test@latest"); !ok {
+		t.Fatal("expected latest cache to be preserved for a non-exact version")
+	}
+}
 
 func TestSameURLOrigin(t *testing.T) {
 	registryUrl, _ := url.Parse("https://registry.example/package")

@@ -249,7 +249,7 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 	}
 
 	ttl := time.Duration(config.NpmQueryCacheTTL) * time.Second
-	return withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
+	pkg, err := withCache("npm:"+pkgName+"@"+version, ttl, func() (*npm.PackageJSON, string, error) {
 		if npm.IsExactVersion(version) {
 			var raw npm.PackageJSONRaw
 			pkgJsonPath := filepath.Join(npmrc.StoreDir(), pkgName+"@"+version, "node_modules", pkgName, "package.json")
@@ -282,6 +282,33 @@ func (npmrc *NpmRC) getPackageInfoContext(ctx context.Context, pkgName string, v
 
 		return rawData.ToNpmPackage(), "npm:" + pkgName + "@" + rawData.Version, nil
 	})
+	if err == nil && npm.IsExactVersion(version) {
+		invalidateDistTagCacheIfNewer(pkgName, pkg.Version)
+	}
+	return pkg, err
+}
+
+// invalidateDistTagCacheIfNewer invalidates the cached "latest" (and its 404
+// counterpart) resolution of a package when an explicitly-requested version
+// resolves to a version newer than the currently cached one. This lets package
+// authors refresh the default (bare-name) version immediately by requesting the
+// new version explicitly, without waiting for the npm query cache TTL to expire.
+// In turn, that allows deployments to run with a larger npmQueryCacheTTL while
+// still picking up new releases promptly when the author asks for one.
+func invalidateDistTagCacheIfNewer(pkgName string, version string) {
+	if !npm.IsExactVersion(version) {
+		return
+	}
+	v, ok := getCacheItem("npm:" + pkgName + "@latest")
+	if !ok {
+		return
+	}
+	latest, ok := v.(*npm.PackageJSON)
+	if !ok || latest.Version == version || !semverLessThan(latest.Version, version) {
+		return
+	}
+	deleteCacheItem("npm:" + pkgName + "@latest")
+	deleteCacheItem("404:" + pkgName + "@latest")
 }
 
 func (npmrc *NpmRC) getPackageInfoByDate(pkgName string, targetDate time.Time) (packageJson *npm.PackageJSON, err error) {
